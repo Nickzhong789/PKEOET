@@ -51,7 +51,7 @@ int main() {
     else
     {
       printf("Receive success!\n");
-      send(adverse_fd, (int*)119, sizeof(119), 0);
+      send(adverse_fd, "(int*)119", 10, 0);
     }
   }
   
