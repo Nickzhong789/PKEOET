@@ -20,7 +20,7 @@ element_t dpk, dsk;
 
 element_t w1[2], w2[2], x[2], y[2];
 element_t temp_x[3];
-element_t temp_y[5];
+element_t temp_y[3];
 element_t theta0, theta1, theta2;
 
 element_t m_a[SIZE_M], m_b[SIZE_M];
@@ -31,13 +31,12 @@ element_t temp_e[24];
 
 element_t omega1, omega2;
 element_t v[4];
-element_t temp_v[28];
+element_t temp_v[30];
 
 pairing_t pairing;
 
-element_t temp_z;
-
 int i = 0;
+int n = 0;
 
 unsigned char w1_s1[256], w1_s2[256], w1_s3[256];
 unsigned char w2_s1[256], w2_s2[256], w2_s3[256];
@@ -62,6 +61,15 @@ struct Ciphertext
     element_t c3;
     element_t c4;
 }c_a[SIZE_M], c_b[SIZE_M];
+
+struct IV
+{
+    element_t v1;
+    element_t v2;
+    element_t v3;
+    element_t v4;
+}iv[SIZE_M];
+
 
 
 char* get_hash(unsigned char tw1_s[], unsigned char tw2_s[], unsigned char tx_s[]) {
@@ -105,15 +113,11 @@ void init() {
         element_init_G2(tk1[i], pairing);
         element_init_G2(tk2[i], pairing);
     }
-    
 
-    for (i = 0; i < 2; i++)
-    {
-        element_init_G1(temp_x[i], pairing);
-    }
-    element_init_GT(temp_x[2], pairing);
+    element_init_G1(temp_x[0], pairing);
+    element_init_GT(temp_x[1], pairing);
 
-    for (i = 0; i < 5; i++)
+    for (i = 0; i < 3; i++)
     {
         element_init_G1(temp_y[i], pairing);
     }
@@ -149,12 +153,18 @@ void init() {
         element_init_GT(v[i], pairing);
     }
 
-    for (i = 0; i < 28; i++)
+    for (i = 0; i < SIZE_M; i++)
+    {
+        element_init_GT(iv[i].v1, pairing);
+        element_init_GT(iv[i].v2, pairing);
+        element_init_GT(iv[i].v3, pairing);
+        element_init_GT(iv[i].v4, pairing);
+    }
+
+    for (i = 0; i < 30; i++)
     {
         element_init_GT(temp_v[i], pairing);
     }
-
-    element_init_Zr(temp_z, pairing);
 
     for (i = 0; i < 1000; i++)
     {
@@ -215,10 +225,18 @@ void dkg() {
     element_set(dsk, alpha);
 }
 
-void enc(int num, element_t w1_t, element_t w2_t, element_t x_t, element_t y_t, element_t m[], struct Ciphertext tc[]) {
+void enc(int num, element_t tpk[], element_t tm[], struct Ciphertext tc[]) {
+    element_t w1_t, w2_t, x_t, y_t;
+
+    element_init_G1(w1_t, pairing);
+    element_init_G1(w2_t, pairing);
+    element_init_GT(x_t, pairing);
+    element_init_GT(y_t, pairing);
+
     start = pbc_get_time();
 
     if (num > SIZE_M) num = SIZE_M;
+    n = num;
 
     for (i = 0; i < num; i++)
     {
@@ -233,26 +251,22 @@ void enc(int num, element_t w1_t, element_t w2_t, element_t x_t, element_t y_t, 
         // printf("w1_s is %02x\n", w1_s1);
         // printf("w2_s is %02x\n", w2_s1);
 
-        element_pow2_zn(temp_x[0], g, s, h, t); // g^s * h^t
-        element_pow_zn(temp_x[1], temp_x[0], r); // (g^s * h^t)^r
-        element_pairing(temp_x[2], temp_x[1], zeta);  // x = e((g^s * h^t)^r, zeta)
-        element_mul(x_t, temp_x[2], m[i]);  // x * m
+        element_pow_zn(temp_x[0], tpk[0], r); // (g^s * h^t)^r
+        element_pairing(temp_x[1], temp_x[0], zeta);  // x = e((g^s * h^t)^r, zeta)
+        element_mul(x_t, temp_x[1], tm[i]);  // x * m
        
-        element_to_bytes(tx_s, temp_x[2]);
         element_to_bytes(x_s, x_t);
 
         theta0_s = get_hash(w1_s1, w2_s1, x_s);
         element_from_hash(theta0, theta0_s, 64);  // theta0 = H(w1, w2, x * m)
         //element_printf("Theta0 is: %B\n", theta0);
 
-        element_pow2_zn(temp_y[0], g, a, h, b);  // g^a * h^b
-        element_pow2_zn(temp_y[1], g, c, h, d);  // g^c * h^d
-        element_pow_zn(temp_y[2], temp_y[2], theta0);  //(g^c * h^d)^theta0
+        element_pow_zn(temp_y[0], tpk[2], theta0);  //(g^c * h^d)^theta0
 
-        element_mul(temp_y[3], temp_y[0], temp_y[2]);  // (g^a * h^b) * (g^c * h^d)^theta0
-        element_pow_zn(temp_y[4], temp_y[3], r);  // ((g^a * h^b) * (g^c * h^d)^theta0)^r
+        element_mul(temp_y[1], tpk[1], temp_y[0]);  // (g^a * h^b) * (g^c * h^d)^theta0
+        element_pow_zn(temp_y[2], temp_y[1], r);  // ((g^a * h^b) * (g^c * h^d)^theta0)^r
 
-        element_pairing(y_t, temp_y[4], zeta);
+        element_pairing(y_t, temp_y[2], zeta);
 
         element_to_bytes(y_s, y_t);
 
@@ -271,7 +285,7 @@ void enc(int num, element_t w1_t, element_t w2_t, element_t x_t, element_t y_t, 
         {
             tc[i].c3_s[j] = x_s[j];
         }
-        for (j = 0; j < 20; j++)
+        for (j = 0; j < 128; j++)
         {
             tc[i].c4_s[j] = y_s[j];
         }
@@ -305,7 +319,7 @@ void tkg(element_t temp_tk[]) {
     total_time += tkg_time;
 }
 
-void IVgen(struct Ciphertext ct1[], struct Ciphertext ct2[]) {
+void IVgen(int ii, struct Ciphertext ct1[], struct Ciphertext ct2[], struct IV tiv[]) {
     element_random(omega1);
     element_random(omega2);
 
@@ -319,20 +333,15 @@ void IVgen(struct Ciphertext ct1[], struct Ciphertext ct2[]) {
     // element_from_bytes(x[1], ct2[0].c3);
     // element_from_bytes(y[1], ct2[0].c4);
 
-    element_set(w1[0], ct1[0].c1);
-    element_set(w2[0], ct1[0].c2);
-    element_set(x[0], ct1[0].c3);
-    element_set(y[0], ct1[0].c4);
+    element_set(w1[0], ct1[ii].c1);
+    element_set(w2[0], ct1[ii].c2);
+    element_set(x[0], ct1[ii].c3);
+    element_set(y[0], ct1[ii].c4);
 
-    element_set(w1[1], ct2[0].c1);
-    element_set(w2[1], ct2[0].c2);
-    element_set(x[1], ct2[0].c3);
-    element_set(y[1], ct2[0].c4);
-
-    // element_printf("w1 is: %B\n", w1[0]);
-    // element_printf("w2 is: %B\n", w2[0]);
-    // element_printf("x is: %B\n", x[0]);
-    // element_printf("y is: %B\n", y[0]);
+    element_set(w1[1], ct2[ii].c1);
+    element_set(w2[1], ct2[ii].c2);
+    element_set(x[1], ct2[ii].c3);
+    element_set(y[1], ct2[ii].c4);
 
     element_div(temp_v[0], x[0], x[1]);  // x1 / x2
     element_pow_zn(v[0], temp_v[0], omega1);  // v1 = (x1 / x2)^omega1
@@ -347,8 +356,11 @@ void IVgen(struct Ciphertext ct1[], struct Ciphertext ct2[]) {
     element_div(temp_v[7], temp_v[3], temp_v[6]);
     element_pow_zn(v[1], temp_v[7], omega1);  // v2
 
-    element_div(temp_v[8], y[0], y[1]);  // y1 / y2
-    element_pow_zn(v[2], temp_v[8], omega2);  // v3 = (y1 / y2)^omega2
+    element_pow_zn(temp_v[8], y[0], omega2);
+    element_pow_zn(temp_v[28], y[1], omega2);
+    element_div(v[2], temp_v[8], temp_v[28]);
+    // element_div(temp_v[8], y[0], y[1]);  // y1 / y2
+    // element_pow_zn(v[2], temp_v[8], omega2);  // v3 = (y1 / y2)^omega2
 
     element_to_bytes(w1_s2, w1[0]);
     element_to_bytes(w1_s3, w1[1]);
@@ -370,111 +382,123 @@ void IVgen(struct Ciphertext ct1[], struct Ciphertext ct2[]) {
     element_mul(temp_v[11], temp_v[9], temp_v[10]);
 
     element_pairing(temp_v[12], w1[0], tk1[4]);  // e(w1(1), t1(5))
-    element_pow_zn(temp_v[13], temp_v[12], theta1);  // (e(w1(1), t1(5)))^theta1
-    element_pairing(temp_v[14], w1[1], tk1[5]);  // e(w1(2), t1(6))
-    element_pow_zn(temp_v[15], temp_v[14], theta1);  // (e(w1(2), t1(6)))^theta1
-    element_mul(temp_v[16], temp_v[13], temp_v[15]);
-    element_mul(temp_v[17], temp_v[11], temp_v[16]);
+    element_pairing(temp_v[13], w1[1], tk1[5]);  // e(w1(2), t1(6))
+    element_mul(temp_v[14], temp_v[12], temp_v[13]);  // e(w1(1), t1(5)) * e(w1(2), t1(6))
+    element_pow_zn(temp_v[15], temp_v[14], theta1);  // (e(w1(1), t1(5)) * e(w1(2), t1(6)))^theta1
+    element_mul(temp_v[27], temp_v[11], temp_v[15]);
 
     element_pairing(temp_v[18], w2[0], tk2[2]);  // e(w2(1), t2(3))
     element_pairing(temp_v[19], w2[1], tk2[3]);  // e(w2(2), t2(4))
     element_mul(temp_v[20], temp_v[18], temp_v[19]);
 
     element_pairing(temp_v[21], w2[0], tk2[4]);  // e(w2(1), t2(5))
-    element_pow_zn(temp_v[22], temp_v[20], theta2);  // (e(w2(1), t2(5)))^theta2
-    element_pairing(temp_v[23], w2[1], tk2[5]);  // e(w2(2), t2(6))
-    element_pow_zn(temp_v[24], temp_v[22], theta2);  // (e(w2(2), t2(6)))^theta2
-    element_mul(temp_v[25], temp_v[22], temp_v[24]);
-    element_mul(temp_v[26], temp_v[20], temp_v[25]);
+    element_pairing(temp_v[22], w2[1], tk2[5]);  // e(w2(2), t2(6))
+    element_mul(temp_v[23], temp_v[21], temp_v[22]);  // e(w2(1), t2(5)) * e(w2(2), t2(6))
+    element_pow_zn(temp_v[24], temp_v[23], theta2);  // (e(w2(1), t2(5)) * e(w2(2), t2(6)))^theta2
+    element_mul(temp_v[26], temp_v[20], temp_v[24]);
 
-    element_div(temp_v[27], temp_v[17], temp_v[26]);
-    element_pow_zn(v[3], temp_v[27], omega2);  // v4
+    element_pow_zn(temp_v[27], temp_v[17], omega2);
+    element_pow_zn(temp_v[29], temp_v[26], omega2);
+    element_div(v[3], temp_v[27], temp_v[29]);
+    // element_div(temp_v[27], temp_v[17], temp_v[26]);
+    // element_pow_zn(v[3], temp_v[27], omega2);  // v4
 
-    for (i = 0; i < 4; i++)
-    {
-        element_printf("V%d is: %B\n", i+1, v[i]);
-    }
+    element_set(tiv[ii].v1, v[0]);
+    element_set(tiv[ii].v2, v[1]);
+    element_set(tiv[ii].v3, v[2]);
+    element_set(tiv[ii].v4, v[3]);
+
+    // for (i = 0; i < 4; i++)
+    // {
+    //     element_printf("V%d is: %B\n", i+1, v[i]);
+    // }
 }
 
-void pTest(struct Ciphertext ct1[], struct Ciphertext ct2[], element_t temp_pk1[], element_t temp_pk2[], element_t temp_tk1[], element_t temp_tk2[]) {
+void pTest(int num, struct Ciphertext ct1[], struct Ciphertext ct2[], element_t temp_pk1[], element_t temp_pk2[], element_t temp_tk1[], element_t temp_tk2[]) {
     start = pbc_get_time();
 
-    element_pairing(temp_e[0], temp_pk1[0], dpk);  // e(pk1(1), dpk)
-    element_pairing(temp_e[1], g, temp_tk1[0]);  // e(g, dpk^s)
-    element_pairing(temp_e[2], h, temp_tk1[1]);  // e(h, dpk^t)
-    element_mul(temp_e[3], temp_e[1], temp_e[2]);
-
-    int b1 = !element_cmp(temp_e[0], temp_e[3]); // cmp returns 0 if a and b are the same, nonzero otherwise
-
-    element_pairing(temp_e[4], temp_pk1[1], dpk);
-    element_pairing(temp_e[5], g, temp_tk1[2]);
-    element_pairing(temp_e[6], h, temp_tk1[3]);
-    element_mul(temp_e[7], temp_e[5], temp_e[6]);
-
-    int b2 = !element_cmp(temp_e[4], temp_e[7]);
-
-    element_pairing(temp_e[8], temp_pk1[2], dpk);
-    element_pairing(temp_e[9], g, temp_tk1[4]);
-    element_pairing(temp_e[10], h, temp_tk1[5]);
-    element_mul(temp_e[11], temp_e[9], temp_e[10]);
-
-    int b3 = !element_cmp(temp_e[8], temp_e[11]);
-
-    element_pairing(temp_e[12], temp_pk2[0], dpk);
-    element_pairing(temp_e[13], g, temp_tk2[0]);
-    element_pairing(temp_e[14], h, temp_tk2[1]);
-    element_mul(temp_e[15], temp_e[13], temp_e[14]);
-
-    int b4 = !element_cmp(temp_e[12], temp_e[15]);
-
-    element_pairing(temp_e[16], temp_pk2[1], dpk);
-    element_pairing(temp_e[17], g, temp_tk2[2]);
-    element_pairing(temp_e[18], h, temp_tk2[3]);
-    element_mul(temp_e[19], temp_e[18], temp_e[17]);
-
-    int b5 = !element_cmp(temp_e[16], temp_e[19]);
-
-    element_pairing(temp_e[20], temp_pk2[2], dpk);
-    element_pairing(temp_e[21], g, temp_tk2[4]);
-    element_pairing(temp_e[22], h, temp_tk2[5]);
-    element_mul(temp_e[23], temp_e[22], temp_e[21]);
-
-    int b6 = !element_cmp(temp_e[20], temp_e[23]);
-
-    if (b1 && b2 && b3 && b4 && b5 && b6)
+    for (i = 0; i < num; i++)
     {
-        IVgen(ct1, ct2);
-        printf("PTest success!\n");
-    }
-    else
-    {
-        printf("PTest failed!\n");
+        element_pairing(temp_e[0], temp_pk1[0], dpk);  // e(pk1(1), dpk)
+        element_pairing(temp_e[1], g, temp_tk1[0]);  // e(g, dpk^s)
+        element_pairing(temp_e[2], h, temp_tk1[1]);  // e(h, dpk^t)
+        element_mul(temp_e[3], temp_e[1], temp_e[2]);
+
+        int b1 = !element_cmp(temp_e[0], temp_e[3]); // cmp returns 0 if a and b are the same, nonzero otherwise
+
+        element_pairing(temp_e[4], temp_pk1[1], dpk);
+        element_pairing(temp_e[5], g, temp_tk1[2]);
+        element_pairing(temp_e[6], h, temp_tk1[3]);
+        element_mul(temp_e[7], temp_e[5], temp_e[6]);
+
+        int b2 = !element_cmp(temp_e[4], temp_e[7]);
+
+        element_pairing(temp_e[8], temp_pk1[2], dpk);
+        element_pairing(temp_e[9], g, temp_tk1[4]);
+        element_pairing(temp_e[10], h, temp_tk1[5]);
+        element_mul(temp_e[11], temp_e[9], temp_e[10]);
+
+        int b3 = !element_cmp(temp_e[8], temp_e[11]);
+
+        element_pairing(temp_e[12], temp_pk2[0], dpk);
+        element_pairing(temp_e[13], g, temp_tk2[0]);
+        element_pairing(temp_e[14], h, temp_tk2[1]);
+        element_mul(temp_e[15], temp_e[13], temp_e[14]);
+
+        int b4 = !element_cmp(temp_e[12], temp_e[15]);
+
+        element_pairing(temp_e[16], temp_pk2[1], dpk);
+        element_pairing(temp_e[17], g, temp_tk2[2]);
+        element_pairing(temp_e[18], h, temp_tk2[3]);
+        element_mul(temp_e[19], temp_e[18], temp_e[17]);
+
+        int b5 = !element_cmp(temp_e[16], temp_e[19]);
+
+        element_pairing(temp_e[20], temp_pk2[2], dpk);
+        element_pairing(temp_e[21], g, temp_tk2[4]);
+        element_pairing(temp_e[22], h, temp_tk2[5]);
+        element_mul(temp_e[23], temp_e[22], temp_e[21]);
+
+        int b6 = !element_cmp(temp_e[20], temp_e[23]);
+
+        if (b1 && b2 && b3 && b4 && b5 && b6)
+        {
+            IVgen(i, ct1, ct2, iv);
+            //printf("PTest success!\n");
+        }
+        else
+        {
+            printf("PTest failed!\n");
+            break;
+        }
     }
     
+    
     double pTest_time = pbc_get_time() - start;
-    printf("PTest Time is: %.2f\n", pTest_time);
+    printf("PTest %d Time is: %.2f\n", num, pTest_time);
     
 }
 
-int dTest(element_t vt[]) {
+int dTest(int ii, struct IV vt[]) {
     element_t temp[2];
-    element_t alpha_t;
 
     for (i = 0; i < 2; i++)
     {
         element_init_GT(temp[i], pairing);
     }
-    element_init_G2(alpha_t, pairing);
 
-    element_neg(alpha_t, alpha);
-    element_pow_zn(temp[0], v[3], alpha_t);
+    element_pow_zn(temp[0], vt[ii].v3, alpha);
 
-    if (element_cmp(v[2], temp[0]))
+    element_printf("v3 is: %B\n", vt[ii].v3);
+    element_printf("v3^alpha is: %B\n", temp[0]);
+    element_printf("v4 is: %B\n", vt[ii].v4);
+
+    if (element_cmp(vt[ii].v4, temp[0]))
         return -1;
     else
     {
-        element_pow_zn(temp[1], v[1], alpha_t);
-        int res = !element_cmp(v[0], temp[1]);
+        element_pow_zn(temp[1], vt[ii].v1, alpha);
+        int res = !element_cmp(vt[ii].v2, temp[1]);
 
         return res;
     }
@@ -509,8 +533,8 @@ int main(int argc, char **argv) {
     ukg(pk2);
     tkg(tk2);
 
-    enc(10, w1[0], w2[0], x[0], y[0], m_a, c_a);
-    enc(10, w1[1], w2[1], x[1], y[1], m_b, c_b);
+    enc(10, pk1, m_a, c_a);
+    enc(10, pk2, m_a, c_b);
 
     // printf("Size of g: %d\n", element_length_in_bytes(g));
     // printf("Size of zeta: %d\n", element_length_in_bytes(zeta));
@@ -518,11 +542,11 @@ int main(int argc, char **argv) {
     // printf("Size of a: %d\n", element_length_in_bytes(a));
     // element_printf("a is: %B\n", a);
 
-    pTest(c_a, c_b, pk1, pk2, tk1, tk2);
+    pTest(n, c_a, c_b, pk1, pk2, tk1, tk2);
 
     // IVgen(c_a, c_b);
 
-    printf("DTest result: %d\n", dTest(v));
+    printf("DTest result: %d\n", dTest(0, iv));
 
     printf("PKEOET Finish!\n");
 
