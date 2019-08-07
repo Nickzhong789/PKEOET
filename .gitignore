@@ -2,4 +2,5 @@
 .vscode/
 PKEOET
 .idea/
+__pycache__/
 
