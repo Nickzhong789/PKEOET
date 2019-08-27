@@ -2,21 +2,38 @@ from pypbc import *
 import hashlib
 import time
 
+import numpy as np
+import json
+
+
+class MyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return super(MyEncoder, self).default(obj)
+
 
 class PKEOET(object):
-    def __init__(self, sp, num):
+    def __init__(self, pairing, num):
         super(PKEOET, self).__init__()
-
-        self.params = Parameters(param_string=sp)
-        self.pairing = Pairing(self.params)
+        self.pairing = pairing
 
         self.num = num
         self.zeta = Element(self.pairing, G2)
-        self.alpha = Element(self.pairing, G2)
+        self.alpha = Element(self.pairing, Zr)
+        self.dpk = Element(self.pairing, G2)
+
         self.g = Element(self.pairing, G1)
         self.h = Element(self.pairing, G1)
         self.one = Element.one(self.pairing, Zr)
+
         self.total_time = 0
+        self.info = {}
 
 
     def setup(self):
@@ -132,6 +149,7 @@ class PKEOET(object):
         temp_y2 = e9 * e10 * (e11**theta2) * (e12**theta2)
 
         v4 = (temp_y1 * (temp_y2**(-self.one)))**omega2
+        # print(v3**self.alpha == v4)
 
         return [v1, v2, v3, v4]
 
@@ -190,6 +208,7 @@ class PKEOET(object):
         v = []
         for i in range(len(tc1)):
             for j in range(len(tc2)):
+                print(i, j)
                 e1 = self.pairing.apply(tpk1[0], self.dpk)
                 e2 = self.pairing.apply(self.g, ttk1[0])
                 e3 = self.pairing.apply(self.h, ttk1[1])
@@ -226,8 +245,12 @@ class PKEOET(object):
                 else:
                     return None
 
-        ptest_time = time.time() - start
-        self.total_time += ptest_time
-        print("PTest Time: ", ptest_time)
+        pTest_time = time.time() - start
+        self.total_time += pTest_time
+        print("PTest Time: ", pTest_time)
 
         return v
+
+    def export(self, file):
+        with open(file, 'w') as f:
+            json.dump(self.info, f, cls=MyEncoder)

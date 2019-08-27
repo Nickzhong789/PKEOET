@@ -3,6 +3,9 @@ import hashlib
 import time
 import argparse
 
+from utils.logger import Logger
+from utils.osutil import *
+
 
 stored_params = """type a
     q 8780710799663312522437781984754049815806883199414208211028653399266475630880222957078625179422662221423155858769582317459277713367317481324925129998224791
@@ -30,7 +33,7 @@ def main(args):
 
     g, h, zeta = setup()
 
-    m_a = init(args.num)
+    # m_a = init(args.num)
 
     dpk, alpha = dkg()
 
@@ -40,10 +43,24 @@ def main(args):
     sk2, pk2 = ukg()
     tk2 = tkg(dpk, sk2)
 
-    c1 = enc(args.num, pk1, tk1, sk1, m_a)
-    c2 = enc(args.num, pk2, tk2, sk2, m_a)
+    logger = Logger(join('./output', 'log1.txt'), title="PKEOET")
+    logger.set_names(['Cipher Num', 'Enc Time', 'PTest Time'])
 
-    v = pTest(c1, c2, pk1, pk2, tk1, tk2, dpk)
+    nums1 = [10, 20, 30, 40, 50, 100, 150, 200, 300]
+    nums2 = [i*100 for i in range(3, 500)]
+    nums = nums1 + nums2
+    for num in nums:
+        m_a = init(num)
+        s = time.time()
+        c1 = enc(num, pk1, tk1, sk1, m_a)
+        et = time.time() - s
+        c2 = enc(10, pk2, tk2, sk2, m_a[:10])
+
+        s1 = time.time()
+        v = pTest(c1, c2, pk1, pk2, tk1, tk2, dpk)
+        pt = time.time() - s1
+        logger.append([num*10, et, pt])
+
     print("Total Time: ", total_time)
 
     count = 0
