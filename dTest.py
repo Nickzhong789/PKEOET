@@ -7,13 +7,18 @@ from utils.osutil import *
 
 
 def dTest(tv, dsk):
+    start = time.time()
     if((tv[2]**dsk) != tv[3]):
         pass
     
     if((tv[0]**dsk) != tv[1]):
-        return 0
+        ret = 0
     else:
-        return 1
+        ret = 1
+    
+    end = time.time() - start
+
+    return ret, end
 
 if __name__ == '__main__':
     with open('./discriminator.json', 'r') as f:
@@ -35,20 +40,17 @@ if __name__ == '__main__':
     nums = nums1 + nums2
 
     count = 0
-    cusor = 0
-    with open('v.txt', 'r') as f:
-        start = time.time()
-
+    cursor = 0
+    dTest_time = 0
+    with open('./ciphertexts/v.txt', 'r') as f:
         for l in f.readlines():
+            count += 1
             vt = l.strip().split('|')
             v = [Element(pairing, GT, value=vi) for vi in vt]
-            e = dTest(v, dsk)
+            d_ret, d_t = dTest(v, dsk)
+            dTest_time += d_t
 
-            count += 1
-            if count == nums[cusor]:
-                print(nums[cusor])
-                t = time.time() - start
-                logger.append([count, t])
-                cusor += 1
-                print('T: ', t)
-                print(cusor)
+            if count == nums[cursor]:
+                cursor += 1
+                logger.append([count, dTest_time])
+                print('dTest %s Time: %s' % (count, dTest_time))

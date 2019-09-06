@@ -1,5 +1,7 @@
 from pkeet import PKEET
 from pypbc import *
+from utils.logger import Logger
+from utils.osutil import *
 
 import time
 import argparse
@@ -18,21 +20,47 @@ def main(args):
     params = Parameters(param_string=stored_params)
     pairing = Pairing(params)
 
-    pkeet = PKEET(pairing, args.num)
+    pkeet = PKEET(pairing)
 
-    m = pkeet.init_m()
+    pkeet.setup()
 
     x1, y1 = pkeet.keygen()
     x2, y2 = pkeet.keygen()
-    c1 = pkeet.enc(m, y1)
-    c2 = pkeet.enc(m, y2)
 
+    logger = Logger(join('./output', 'pkeet_log.txt'), title='PKEET')
+    logger.set_names(['C Num', 'Enc Time', 'Test Time'])
+
+    nums1 = [10, 20, 30, 40, 50, 100, 150, 200]
+    nums2 = [i*100 for i in range(3, 901)]
+    nums = nums1 + nums2
+    print(nums[-1])
+
+    cursor = 0
+    count = 0
+    enc_time = 0
+    test_time = 0
     d_list = []
-    start = time.time()
-    for i in range(len(c1)):
-        d_list.append(pkeet.test(c1[i], c2[i]))
-    test_time = time.time() - start
-    print(test_time)
+
+    with open('./ciphertexts/c.txt', 'r') as f:
+        for l in f.readlines():
+            count += 1
+            m = Element(pairing, G1, value=l.strip())
+
+            start = time.time()
+            c1 = pkeet.enc(m, y1)
+            enc_time += time.time() - start
+            c2 = pkeet.enc(m, y2)
+
+            t_ret, t_t = pkeet.test(c1, c2)
+            d_list.append(t_ret)
+            test_time += t_t
+            print(t_t)
+
+            if count == nums[cursor]:
+                print('Enc %d Time: %s' % (count, enc_time))
+                print('Test %d Time: %s' % (count, test_time))
+                logger.append([count, enc_time, test_time])
+                cursor += 1
 
 
 if __name__ == "__main__":
