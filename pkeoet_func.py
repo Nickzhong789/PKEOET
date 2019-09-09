@@ -26,42 +26,55 @@ g = Element(pairing, G1)
 h = Element(pairing, G1)
 one = Element.one(pairing, Zr)
 
-total_time = 0
 
 def main(args):
-    global zeta, alpha, g, h, one, total_time
+    global zeta, alpha, g, h, one
 
-    g, h, zeta = setup()
+    total_time = 0.0
 
-    # m_a = init(args.num)
+    g, h, zeta, setup_time = setup()
+    total_time += setup_time
 
-    dpk, alpha = dkg()
+    dpk, alpha, dkg_time = dkg()
+    total_time += dkg_time
 
-    sk1, pk1 = ukg()
-    tk1 = tkg(dpk, sk1)
+    sk1, pk1, ukg_time = ukg()
+    tk1, tkg_time = tkg(dpk, sk1)
+    total_time += ukg_time + tkg_time
 
-    sk2, pk2 = ukg()
-    tk2 = tkg(dpk, sk2)
+    sk2, pk2, ut2 = ukg()
+    tk2, tt2 = tkg(dpk, sk2)
 
     logger = Logger(join('./output', 'log1.txt'), title="PKEOET")
-    logger.set_names(['Cipher Num', 'Enc Time', 'PTest Time'])
+    logger.set_names(['Cipher Num', 'Enc Time', 'PTest Time', 'Total Time'])
 
-    nums1 = [10, 20, 30, 40, 50, 100, 150, 200, 300]
-    nums2 = [i*100 for i in range(3, 500)]
+    nums1 = [10, 20, 30, 40, 50, 100, 150, 200]
+    nums2 = [i*100 for i in range(3, 1000)]
     nums = nums1 + nums2
-    for num in nums:
-        m_a = init(num)
-        s = time.time()
-        c1 = enc(num, pk1, tk1, sk1, m_a)
-        et = time.time() - s
-        c2 = enc(10, pk2, tk2, sk2, m_a[:10])
 
-        s1 = time.time()
-        v = pTest(c1, c2, pk1, pk2, tk1, tk2, dpk)
-        pt = time.time() - s1
-        logger.append([num*10, et, pt])
+    count = 0
+    cursor = 0
+    enc_time = 0
+    pTest_time = 0
+    with open('./ciphertexts/c_gt.txt', 'r') as f:
+        for l in f.readlines():
+            count += 1
+            m = Element(pairing, GT, value=l.strip())
 
-    print("Total Time: ", total_time)
+            c1, et1 = enc(pk1, tk1, sk1, m)
+            c2, et2 = enc(pk2, tk2, sk2, m)
+            enc_time += et1
+
+            v, pt = pTest(c1, c2, pk1, pk2, tk1, tk2, dpk)
+            pTest_time += pt
+            total_time += et1 + pt
+
+            if count == nums[cursor]:
+                print('Enc %d Time: %s' % (count, enc_time))
+                print('pTest %d Time: %s' % (count, pTest_time))
+                print('Total Time: ', total_time)
+                logger.append([count, enc_time, pTest_time, total_time])
+                cursor += 1
 
     count = 0
     for i in range(len(v)):
@@ -70,7 +83,6 @@ def main(args):
     print(count)
 
 def setup():
-    global total_time
     start = time.time()
 
     g = Element.random(pairing, G1)
@@ -78,10 +90,8 @@ def setup():
     zeta = Element.random(pairing, G2)
 
     setup_time = time.time() - start
-    total_time += setup_time
-    print("Setup Time: ", setup_time)
     
-    return g, h, zeta
+    return g, h, zeta, setup_time
 
 def init(num):
     t_m, m = [], []
@@ -94,7 +104,6 @@ def init(num):
     return m
 
 def dkg():
-    global total_time
     start = time.time()
 
     dpk = Element(pairing, G2)
@@ -103,13 +112,10 @@ def dkg():
     dpk = zeta**alpha
 
     dkg_time = time.time() - start
-    total_time += dkg_time
-    print("DKG Time: ", dkg_time)
     
-    return dpk, alpha
+    return dpk, alpha, dkg_time
 
 def ukg():
-    global total_time
     start = time.time()
 
     sk, pk = [], []
@@ -119,13 +125,10 @@ def ukg():
     pk = [(g**sk[i]) * (h**sk[i+1]) for i in range(0, 6, 2)]
 
     ukg_time = time.time() - start
-    total_time += ukg_time
-    print("UKG Time: ", ukg_time)
     
-    return sk, pk
+    return sk, pk, ukg_time
 
 def tkg(tdpk, tsk):
-    global total_time
     start = time.time()
 
     tk = []
@@ -135,10 +138,8 @@ def tkg(tdpk, tsk):
     tk = [tdpk**tsk[i] for i in range(6)]
 
     tkg_time = time.time() - start
-    total_time += tkg_time
-    print("TKG Time: ", tkg_time)
     
-    return tk
+    return tk, tkg_time
 
 def get_hash(c1, c2, c3):
     h_in = str(c1) + str(c2) + str(c3)
@@ -193,32 +194,26 @@ def IVgen(tc1, tc2, ttk1, ttk2):
 
     return [v1, v2, v3, v4]
 
-def enc(num, tpk, ttk, tsk, tm):
-    global total_time
+def enc(tpk, ttk, tsk, tm):
     start = time.time()
 
-    c = []
-    for i in range(num):
-        r = Element.random(pairing, Zr)
-        
-        w1 = g**r
-        w2 = h**r
-
-        e = pairing.apply(tpk[0]**r, zeta)
-        x = (pairing.apply(tpk[0]**r, zeta)) * tm[i] # e((g^s * h^t)^r, zeta)
-        
-        e1 = pairing.apply(w1, ttk[0])
-        e2 = pairing.apply(w2, ttk[1])
-        
-        theta = get_hash(w1, w2, x)
-        y = pairing.apply((tpk[1]**r) * (tpk[2]**theta)**r, zeta)
-
-        c.append([w1, w2, x, y])
+    r = Element.random(pairing, Zr)
+    
+    w1 = g**r
+    w2 = h**r
+    e = pairing.apply(tpk[0]**r, zeta)
+    x = (pairing.apply(tpk[0]**r, zeta)) * tm  # e((g^s * h^t)^r, zeta)
+    
+    e1 = pairing.apply(w1, ttk[0])
+    e2 = pairing.apply(w2, ttk[1])
+    
+    theta = get_hash(w1, w2, x)
+    y = pairing.apply((tpk[1]**r) * (tpk[2]**theta)**r, zeta)
+    c = [w1, w2, x, y]
     
     enc_time = time.time() - start
-    total_time += enc_time
-    print("Enc Time: ", enc_time)
-    return c
+    
+    return c, enc_time
 
 def dec(tsk, tc):
     m = []
@@ -245,53 +240,47 @@ def dec(tsk, tc):
     return m
 
 def pTest(tc1, tc2, tpk1, tpk2, ttk1, ttk2, tdpk):
-    global total_time
     start = time.time()
 
-    v = []
-    for i in range(len(tc1)):
-        for j in range(len(tc2)):
-            e1 = pairing.apply(tpk1[0], tdpk)
-            e2 = pairing.apply(g, ttk1[0])
-            e3 = pairing.apply(h, ttk1[1])
-            b1 = (e1 == (e2 * e3))
+    e1 = pairing.apply(tpk1[0], tdpk)
+    e2 = pairing.apply(g, ttk1[0])
+    e3 = pairing.apply(h, ttk1[1])
+    b1 = (e1 == (e2 * e3))
 
-            e4 = pairing.apply(tpk1[1], tdpk)
-            e5 = pairing.apply(g, ttk1[2])
-            e6 = pairing.apply(h, ttk1[3])
-            b2 = (e4 == (e5 * e6))
+    e4 = pairing.apply(tpk1[1], tdpk)
+    e5 = pairing.apply(g, ttk1[2])
+    e6 = pairing.apply(h, ttk1[3])
+    b2 = (e4 == (e5 * e6))
 
-            e7 = pairing.apply(tpk1[2], tdpk)
-            e8 = pairing.apply(g, ttk1[4])
-            e9 = pairing.apply(h, ttk1[5])
-            b3 = (e7 == (e8 * e9))
+    e7 = pairing.apply(tpk1[2], tdpk)
+    e8 = pairing.apply(g, ttk1[4])
+    e9 = pairing.apply(h, ttk1[5])
+    b3 = (e7 == (e8 * e9))
 
-            e10 = pairing.apply(tpk2[0], tdpk)
-            e11 = pairing.apply(g, ttk2[0])
-            e12 = pairing.apply(h, ttk2[1])
-            b4 = (e10 == (e11 * e12))
+    e10 = pairing.apply(tpk2[0], tdpk)
+    e11 = pairing.apply(g, ttk2[0])
+    e12 = pairing.apply(h, ttk2[1])
+    b4 = (e10 == (e11 * e12))
 
-            e13 = pairing.apply(tpk2[1], tdpk)
-            e14 = pairing.apply(g, ttk2[2])
-            e15 = pairing.apply(h, ttk2[3])
-            b5 = (e13 == (e14 * e15))
+    e13 = pairing.apply(tpk2[1], tdpk)
+    e14 = pairing.apply(g, ttk2[2])
+    e15 = pairing.apply(h, ttk2[3])
+    b5 = (e13 == (e14 * e15))
 
-            e16 = pairing.apply(tpk2[2], tdpk)
-            e17 = pairing.apply(g, ttk2[4])
-            e18 = pairing.apply(h, ttk2[5])
-            b6 = (e16 == (e17 * e18))
+    e16 = pairing.apply(tpk2[2], tdpk)
+    e17 = pairing.apply(g, ttk2[4])
+    e18 = pairing.apply(h, ttk2[5])
+    b6 = (e16 == (e17 * e18))
 
-            b7 = (b1 and b2 and b3 and b4 and b5 and b6)
-            if b7:
-                v.append(IVgen(tc1[i], tc2[j], ttk1, ttk2))
-            else:
-                return None
+    b7 = (b1 and b2 and b3 and b4 and b5 and b6)
+    if b7:
+        v = IVgen(tc1, tc2, ttk1, ttk2)
+    else:
+        return None
 
     ptest_time = time.time() - start
-    total_time += ptest_time
-    print("PTest Time: ", ptest_time)
      
-    return v
+    return v, ptest_time
 
 def dTest(tv):
     if((tv[2]**alpha) != tv[3]):

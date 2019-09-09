@@ -4,6 +4,4 @@ PKEOET
 .idea/
 __pycache__/
 *.json
-*.txt
 *.c
-ciphertexts

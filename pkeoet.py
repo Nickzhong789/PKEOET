@@ -32,7 +32,6 @@ class PKEOET(object):
         self.h = Element(self.pairing, G1)
         self.one = Element.one(self.pairing, Zr)
 
-        self.total_time = 0
         self.info = {}
 
 
@@ -45,7 +44,8 @@ class PKEOET(object):
 
         setup_time = time.time() - start
         self.total_time += setup_time
-        print("Setup Time: ", setup_time)
+        
+        return setup_time
 
     def init(self):
         t_m, m = [], []
@@ -66,8 +66,8 @@ class PKEOET(object):
         self.dpk = self.zeta**self.alpha
 
         dkg_time = time.time() - start
-        self.total_time += dkg_time
-        print("DKG Time: ", dkg_time)
+        
+        return dkg_time
 
     def ukg(self):
         start = time.time()
@@ -79,8 +79,8 @@ class PKEOET(object):
         pk = [(self.g**sk[i]) * (self.h**sk[i+1]) for i in range(0, 6, 2)]
     
         ukg_time = time.time() - start
-        self.total_time += ukg_time
-        print("UKG Time: ", ukg_time)
+        
+        return ukg_time
         
         return sk, pk
 
@@ -94,10 +94,8 @@ class PKEOET(object):
         tk = [self.dpk**tsk[i] for i in range(6)]
 
         tkg_time = time.time() - start
-        self.total_time += tkg_time
-        print("TKG Time: ", tkg_time)
 
-        return tk
+        return tk, tkg_time
 
     def get_hash(self, c1, c2, c3):
         h_in = str(c1) + str(c2) + str(c3)
@@ -175,9 +173,8 @@ class PKEOET(object):
             c.append([w1, w2, x, y])
 
         enc_time = time.time() - start
-        self.total_time += enc_time
-        print("Enc Time: ", enc_time)
-        return c
+
+        return c, enc_time
 
     def dec(self, tsk, tc):
         m = []
@@ -246,10 +243,8 @@ class PKEOET(object):
                     return None
 
         pTest_time = time.time() - start
-        self.total_time += pTest_time
-        print("PTest Time: ", pTest_time)
 
-        return v
+        return v, pTest_time
 
     def export(self, file):
         with open(file, 'w') as f:

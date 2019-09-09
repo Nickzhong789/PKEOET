@@ -46,15 +46,14 @@ def main(args):
             count += 1
             m = Element(pairing, G1, value=l.strip())
 
-            start = time.time()
-            c1 = pkeet.enc(m, y1)
-            enc_time += time.time() - start
-            c2 = pkeet.enc(m, y2)
+            c1, et1 = pkeet.enc(m, y1)
+            c2, et2 = pkeet.enc(m, y2)
+            enc_time += et1
 
             t_ret, t_t = pkeet.test(c1, c2)
             d_list.append(t_ret)
             test_time += t_t
-            print(t_t)
+            # print(t_t)
 
             if count == nums[cursor]:
                 print('Enc %d Time: %s' % (count, enc_time))

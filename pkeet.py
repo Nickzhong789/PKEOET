@@ -35,6 +35,7 @@ class PKEET(object):
         return hv
 
     def enc(self, m, y):
+        start = time.time()
         r = Element.random(self.pairing, Zr)
         u = self.g**r
         v = m**r
@@ -45,8 +46,9 @@ class PKEET(object):
         for i in range(len(h)):
             w += chr(ord(h[i]) ^ ord(mr_s[i])) 
         c = [str(u), str(v), w]
+        enc_time = time.time() - start
         
-        return c
+        return c, enc_time
 
     def test(self, c1, c2):
         u1 = Element(self.pairing, G1, value=c1[0])
